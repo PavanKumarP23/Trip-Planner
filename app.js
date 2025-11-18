@@ -1,327 +1,112 @@
-// app.js — improved: image fallback + multi-hotels-target + robust rendering
-
-// --- Demo data (same as before) ---
-const DESTINATIONS = [
-  {
-    id: 'nyc',
-    name: 'New York City, NY',
-    img: 'https://images.unsplash.com/photo-1549921296-3f2f0a3d2b0b?auto=format&fit=crop&w=1200&q=80',
-    desc: 'Iconic skyline, museums, Broadway shows.',
-    hotels: [
-      {name:'Central Boutique', rating:4.5, price:240},
-      {name:'Midtown Budget Inn', rating:3.4, price:120},
-      {name:'Riverside Luxury', rating:5, price:560}
-    ],
-    places: [
-      {type:'attractions', name:'Statue of Liberty', rating:4.8},
-      {type:'restaurants', name:'Famous Pizza', rating:4.5},
-      {type:'parks', name:'Central Park', rating:4.9}
-    ]
-  },
-  {
-    id: 'gc',
-    name: 'Grand Canyon, AZ',
-    img: 'https://images.unsplash.com/photo-1501785888041-af3ef285b470?auto=format&fit=crop&w=1200&q=80',
-    desc: 'Vast canyon vistas and hiking.',
-    hotels: [
-      {name:'Rim Lodge', rating:4.2, price:180},
-      {name:'Canyon Camp', rating:3.9, price:90}
-    ],
-    places: [
-      {type:'attractions', name:'South Rim Viewpoints', rating:4.9},
-      {type:'parks', name:'Grand Canyon National Park', rating:5}
-    ]
-  },
-  {
-    id: 'sf',
-    name: 'San Francisco, CA',
-    img: 'https://images.unsplash.com/photo-1501594907352-04cda38ebc29?auto=format&fit=crop&w=1200&q=80',
-    desc: 'Golden Gate, cable cars, lively neighborhoods.',
-    hotels: [
-      {name:'Bayview Hotel', rating:4.3, price:220},
-      {name:'Cozy Wharf Inn', rating:4.0, price:160}
-    ],
-    places: [
-      {type:'attractions', name:'Golden Gate Bridge', rating:4.9},
-      {type:'restaurants', name:"Fisherman's Wharf Eats", rating:4.4}
-    ]
-  },
-  {
-    id: 'ys',
-    name: 'Yellowstone, WY',
-    img: 'https://images.unsplash.com/photo-1511537190424-bbbab87ac5eb?auto=format&fit=crop&w=1200&q=80',
-    desc: 'Geysers, wildlife, and wilderness.',
-    hotels: [
-      {name:'Old Faithful Inn', rating:4.7, price:210},
-      {name:'Parkside Cabin', rating:4.1, price:130}
-    ],
-    places: [
-      {type:'attractions', name:'Old Faithful', rating:4.9},
-      {type:'parks', name:'Yellowstone National Park', rating:5}
-    ]
-  },
-  {
-    id: 'miami',
-    name: 'Miami, FL',
-    img: 'https://images.unsplash.com/photo-1483729558449-99ef09a8c325?auto=format&fit=crop&w=1200&q=80',
-    desc: 'Beaches, nightlife, and Art Deco architecture.',
-    hotels: [
-      {name:'Oceanfront Suites', rating:4.4, price:280},
-      {name:'Miami Budget Stay', rating:3.8, price:110}
-    ],
-    places: [
-      {type:'attractions', name:'South Beach', rating:4.7},
-      {type:'restaurants', name:'Cuban Corner', rating:4.6}
-    ]
-  }
-];
-
-// --- Helpers ---
-function makePlaceholderDataUrl(text, w = 800, h = 480, bg = '#ddebf5', fg = '#0f1724') {
-  // simple SVG placeholder encoded as data URL
-  const svg = `<svg xmlns='http://www.w3.org/2000/svg' width='${w}' height='${h}'>
-    <rect width='100%' height='100%' fill='${bg}' />
-    <text x='50%' y='50%' font-family='Inter,Arial,sans-serif' font-size='28' fill='${fg}' text-anchor='middle' dominant-baseline='central'>${escapeXml(text)}</text>
-  </svg>`;
-  return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
-}
-function escapeXml(s){ return String(s).replace(/[&<>'"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','\'':'&#39;','"':'&quot;'}[c])); }
-
-// --- DOM refs (robust) ---
-const citySelect = document.getElementById('city');
-const estimateBtn = document.getElementById('estimateBtn');
-const estEls = document.querySelectorAll('.est, #estPanel'); // multiple spots OK
-const findHotelsBtn = document.getElementById('findHotels');
-const ratingSel = document.getElementById('rating');
-const priceSel = document.getElementById('priceRange');
-const placesEl = document.getElementById('places');
-const typeFilter = document.getElementById('typeFilter') || document.getElementById('typeFilter'); // may exist
-const sortBy = document.getElementById('sortBy') || document.getElementById('sortBy');
-const saveBtn = document.getElementById('saveIt');
-const clearBtn = document.getElementById('clearIt');
-const itCard = document.getElementById('it-card');
-
-// hotels: there may be multiple containers with id="hotels" (panel + content). select all
-function getHotelsContainers(){
-  // querySelectorAll supports duplicate IDs; returns NodeList
-  return document.querySelectorAll('#hotels');
-}
-
-// --- Populate city select ---
-function populateCities() {
-  if (!citySelect) return;
-  citySelect.innerHTML = '';
-  DESTINATIONS.forEach(d => {
-    const opt = document.createElement('option');
-    opt.value = d.id;
-    opt.textContent = d.name;
-    citySelect.append(opt);
-  });
-}
-populateCities();
-
-// --- Image creation with fallback ---
-function createPlaceThumb(dest, p) {
-  const div = document.createElement('div');
-  div.className = 'thumb';
-  div.setAttribute('role', 'listitem');
-
-  const img = document.createElement('img');
-  img.alt = `${p.name} — ${dest.name}`;
-
-  // set primary src
-  img.src = dest.img;
-
-  // if the image fails to load, use data-URI placeholder with place name
-  img.onerror = () => {
-    img.onerror = null;
-    img.src = makePlaceholderDataUrl(p.name);
-  };
-
-  const meta = document.createElement('div');
-  meta.className = 'meta';
-  meta.innerHTML = `<strong>${p.name}</strong><div class="muted">${p.type} • Rating: ${p.rating}</div>`;
-
-  div.append(img, meta);
-  return div;
-}
-
-// --- Render places gallery for selected city ---
-function renderPlacesFor(cityId) {
-  if (!placesEl) return;
-  placesEl.innerHTML = '';
-  const dest = DESTINATIONS.find(d => d.id === cityId);
-  if (!dest) return;
-  // create thumbs for each place
-  dest.places.forEach(p => {
-    const thumb = createPlaceThumb(dest, p);
-    placesEl.appendChild(thumb);
-  });
-}
-
-// --- Render hotels to all hotels containers ---
-function renderHotels(cityId) {
-  const containers = getHotelsContainers();
-  containers.forEach(c => c.innerHTML = ''); // clear them
-  const dest = DESTINATIONS.find(d => d.id === cityId);
-  if (!dest) {
-    containers.forEach(c => c.textContent = 'No hotels for this destination.');
-    return;
-  }
-  const minRating = Number(ratingSel ? ratingSel.value : 0);
-  const maxPrice = Number(priceSel ? priceSel.value : 9999);
-  const filtered = dest.hotels.filter(h => h.rating >= minRating && h.price <= maxPrice);
-  if (filtered.length === 0) {
-    containers.forEach(c => c.textContent = 'No hotels match filters.');
-    return;
-  }
-  filtered.forEach(h => {
-    const html = document.createElement('div');
-    html.className = 'item';
-    html.innerHTML = `<div style="flex:1">
-      <strong>${h.name}</strong><div class="muted">Rating: ${h.rating} • $${h.price}/night</div>
-    </div>
-    <div><button class="btn small" data-name="${h.name}">Select</button></div>`;
-    containers.forEach(c => c.appendChild(html.cloneNode(true)));
-  });
-}
-
-// --- Simple estimator ---
-function estimate() {
-  const transport = document.querySelector('input[name="transport"]:checked')?.value || 'flight';
-  const cityId = citySelect?.value;
-  const dest = DESTINATIONS.find(d => d.id === cityId);
-  if (!dest) {
-    updateEst('Pick a destination first.');
-    return;
-  }
-  const distFactor = {nyc:1, gc:2.8, sf:2.5, ys:3, miami:2.2}[cityId] || 2;
-  let time, price;
-  if (transport === 'flight') {
-    time = Math.round(1.5 * distFactor) + 'h';
-    price = Math.round(120 * distFactor);
-  } else if (transport === 'train') {
-    time = Math.round(3.5 * distFactor) + 'h';
-    price = Math.round(60 * distFactor);
-  } else {
-    time = Math.round(5 * distFactor) + 'h';
-    price = Math.round(40 * distFactor);
-  }
-  updateEst(`Estimate: approx ${time}, from $${price} per passenger (mock).`);
-}
-
-function updateEst(text) {
-  estEls.forEach(el => { if (el) el.textContent = text; });
-}
-
-// --- Itinerary save/clear ---
-function saveItinerary() {
-  const cityId = citySelect?.value;
-  const dest = DESTINATIONS.find(d => d.id === cityId);
-  const from = document.getElementById('from')?.value || '—';
-  const to = document.getElementById('to')?.value || '—';
-  const pax = document.getElementById('pax')?.value || '1';
-  const transport = document.querySelector('input[name="transport"]:checked')?.value || 'flight';
-  const it = {city: dest ? dest.name : '—', from, to, pax, transport};
-  localStorage.setItem('itinerary', JSON.stringify(it));
-  renderItinerary();
-}
-
-function clearItinerary() {
-  localStorage.removeItem('itinerary');
-  renderItinerary();
-}
-
-function renderItinerary() {
-  if (!itCard) return;
-  const raw = localStorage.getItem('itinerary');
-  if (!raw) { itCard.textContent = 'No saved itinerary yet.'; return; }
-  const it = JSON.parse(raw);
-  itCard.innerHTML = `<strong>${it.city}</strong><div class="muted">From: ${it.from} • To: ${it.to} • Pax: ${it.pax}</div><div style="margin-top:6px">Transport: ${it.transport}</div>`;
-}
-
-// --- Wire events ---
+// app.js — minimal interactive logic + auto holiday decorations
 document.addEventListener('DOMContentLoaded', () => {
-  // initial populate
-  populateCities();
-  if (citySelect) {
-    citySelect.value = DESTINATIONS[0].id;
-    renderPlacesFor(citySelect.value);
-    renderHotels(citySelect.value);
-    citySelect.addEventListener('change', () => {
-      renderPlacesFor(citySelect.value);
-      renderHotels(citySelect.value);
+  const searchForm = document.getElementById('searchForm');
+  const searchInput = document.getElementById('searchInput');
+  const suggestions = document.getElementById('suggestions');
+  const cards = document.getElementById('cards');
+  const savedCountEl = document.getElementById('savedCount');
+  const toggleMap = document.getElementById('toggleMap');
+  const mapRegion = document.getElementById('mapRegion');
+  const selectedTransport = document.getElementById('selectedTransport');
+  const datePill = document.getElementById('datePill');
+
+  let saved = 0;
+  const common = ['New York','Grand Canyon','San Francisco','Miami','Yellowstone','Los Angeles','Chicago','Las Vegas','San Diego','New Orleans'];
+
+  // seed sample cards
+  const sample = [
+    {name:'Skyline Hotel', city:'New York', price:199, img:'https://source.unsplash.com/400x300/?newyork,hotel'},
+    {name:'Canyon View Lodge', city:'Grand Canyon', price:149, img:'https://source.unsplash.com/400x300/?grand-canyon,lodge'},
+    {name:'Golden Gate Inn', city:'San Francisco', price:180, img:'https://source.unsplash.com/400x300/?san-francisco,hotel'}
+  ];
+  function addCard(p){ 
+    const art=document.createElement('article'); art.className='thumb';
+    art.innerHTML = `<img src="${p.img}" alt="${p.city} hotel"><div class="meta"><strong>${p.name}</strong><div class="small muted">${p.city} • $${p.price}</div><div style="margin-top:8px;"><button class="btn save">Save</button> <button class="btn" data-hotel="${p.name}">Book</button></div></div>`;
+    cards.appendChild(art);
+  }
+  sample.forEach(addCard);
+
+  // suggestions
+  function showSuggestions(q){
+    const ql = q.trim().toLowerCase();
+    suggestions.textContent = '';
+    if(!ql) return;
+    const matches = common.filter(s => s.toLowerCase().includes(ql)).slice(0,5);
+    matches.forEach(m => {
+      const b = document.createElement('button');
+      b.className = 'pill';
+      b.type = 'button';
+      b.textContent = m;
+      b.addEventListener('click', () => { searchInput.value = m; doSearch(m); });
+      suggestions.appendChild(b);
     });
   }
+  searchInput.addEventListener('input', e => showSuggestions(e.target.value));
 
-  if (estimateBtn) estimateBtn.addEventListener('click', estimate);
-  const findHotelsBtnEl = document.getElementById('findHotels');
-  if (findHotelsBtnEl) findHotelsBtnEl.addEventListener('click', () => renderHotels(citySelect.value));
-
-  if (typeFilter) {
-    typeFilter.addEventListener('change', () => {
-      const cityId = citySelect.value;
-      const dest = DESTINATIONS.find(d => d.id === cityId);
-      if (!dest) return;
-      const type = typeFilter.value;
-      placesEl.innerHTML = '';
-      dest.places
-        .filter(p => type === 'all' ? true : p.type === type)
-        .forEach(p => placesEl.appendChild(createPlaceThumb(dest, p)));
-    });
-  }
-
-  if (sortBy) {
-    sortBy.addEventListener('change', () => {
-      const cityId = citySelect.value;
-      const dest = DESTINATIONS.find(d => d.id === cityId);
-      if (!dest) return;
-      const items = [...dest.places];
-      if (sortBy.value === 'rating') items.sort((a,b)=>b.rating-a.rating);
-      else if (sortBy.value === 'distance') items.reverse();
-      placesEl.innerHTML = '';
-      items.forEach(p => placesEl.appendChild(createPlaceThumb(dest, p)));
-    });
-  }
-
-  // hotels select click (delegation)
-  document.addEventListener('click', (e) => {
-    if (e.target.matches('#hotels .btn, .list .btn')) {
-      const name = e.target.dataset.name;
-      if (name) alert(`Selected hotel: ${name} (mock).`);
-    }
+  // transport radio -> label update
+  document.querySelectorAll('.transport input').forEach(r => {
+    r.addEventListener('change', () => selectedTransport.textContent = r.dataset.mode || r.parentElement.textContent.trim());
   });
 
-  if (saveBtn) saveBtn.addEventListener('click', saveItinerary);
-  if (clearBtn) clearBtn.addEventListener('click', clearItinerary);
+  // form submit
+  searchForm.addEventListener('submit', e => { e.preventDefault(); doSearch(searchInput.value.trim()); });
 
-  renderItinerary();
+  function doSearch(q){
+    if(!q){ suggestions.textContent = 'Enter a destination.'; return; }
+    suggestions.textContent = `Searching ${q}...`;
+    datePill.textContent = document.getElementById('departDate').value || 'Flexible dates';
+    setTimeout(() => {
+      suggestions.textContent = `Showing results for ${q}`;
+      const p = {name: `${q} Highlights`, city: q, price: 0, img: `https://source.unsplash.com/400x300/?${encodeURIComponent(q)}`};
+      addCard(p);
+    }, 420);
+  }
 
-  // keyboard: Enter/Space on focused buttons triggers click
-  document.addEventListener('keydown', (e) => {
-    if ((e.key === 'Enter' || e.key === ' ') && document.activeElement && document.activeElement.tagName === 'BUTTON') {
-      document.activeElement.click();
+  // card actions (delegation)
+  cards.addEventListener('click', e => {
+    const btn = e.target.closest('button');
+    if(!btn) return;
+    if(btn.classList.contains('save')){ btn.classList.toggle('saved'); saved += btn.classList.contains('saved') ? 1 : -1; savedCountEl.textContent = Math.max(0, saved); }
+    if(btn.dataset.hotel){ alert('Booking (demo) → ' + btn.dataset.hotel); }
+  });
+
+  // toggle map
+  toggleMap.addEventListener('click', () => { mapRegion.hidden = !mapRegion.hidden; });
+
+  // keyboard: enter on pill triggers search
+  document.addEventListener('keydown', e => {
+    if(e.key === 'Enter' && document.activeElement && document.activeElement.classList.contains('pill')){
       e.preventDefault();
+      doSearch(document.activeElement.textContent);
     }
   });
+
+  // keep mapRegion accessible
+  new MutationObserver(() => { if(!mapRegion.hidden) mapRegion.setAttribute('tabindex','-1'); else mapRegion.removeAttribute('tabindex'); })
+    .observe(mapRegion, {attributes:true,attributeFilter:['hidden']});
+
+  // -------------------------
+  // Auto-insert holiday decorations (no toggle)
+  // -------------------------
+  (function autoHoliday(){
+    const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    // bg
+    const bg = document.createElement('div'); bg.className = 'holiday-bg';
+    if(!document.body.contains(bg)) document.body.appendChild(bg);
+    // lights
+    if(!reduce){
+      const lights = document.createElement('div'); lights.className = 'holiday-lights';
+      const colors = ['c1','c2','c3','c4','c5'];
+      for(let i=0;i<16;i++){
+        const b = document.createElement('div'); b.className = 'bulb ' + colors[i%colors.length];
+        b.style.animationDelay = (Math.random()*2) + 's';
+        lights.appendChild(b);
+      }
+      document.body.appendChild(lights);
+      const snow = document.createElement('div'); snow.className = 'holiday-snow'; document.body.appendChild(snow);
+    }
+    document.documentElement.classList.add('holiday-root');
+    document.querySelector('.container')?.classList.add('holiday');
+    document.querySelector('.brand')?.classList.add('holiday');
+  })();
 });
-
-// --- Utility: createPlaceThumb re-used by filters (keeps images fallback consistent) ---
-function createPlaceThumb(dest, p) {
-  const div = document.createElement('div');
-  div.className = 'thumb';
-  div.setAttribute('role', 'listitem');
-
-  const img = document.createElement('img');
-  img.alt = `${p.name} — ${dest.name}`;
-  img.src = dest.img;
-  img.onerror = () => { img.onerror = null; img.src = makePlaceholderDataUrl(p.name); };
-
-  const meta = document.createElement('div');
-  meta.className = 'meta';
-  meta.innerHTML = `<strong>${p.name}</strong><div class="muted">${p.type} • Rating: ${p.rating}</div>`;
-
-  div.appendChild(img);
-  div.appendChild(meta);
-  return div;
-}
